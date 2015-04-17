@@ -5,7 +5,7 @@ if [ "$1" = "" ]; then
  exit 1
 fi
 
-channels=`wget "http://${1}:8080/playlist/channels" -O - 2>/dev/null | tr -d "\n" | sed "s%http://192.168.1.110:8080/stream/channelid/%;%g" | sed "s/#EXTINF:-1,/\n/g"`
+channels=`wget "http://${1}:8080/playlist/channels" -O - 2>/dev/null | tr -d "\n" | sed "s%http://${1}:8080/stream/channelid/%;%g" | sed "s/#EXTINF:-1,/\n/g"`
 
 if [ "$channels" != "" ]; then
 
