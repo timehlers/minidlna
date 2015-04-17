@@ -34,3 +34,26 @@ Prerequisites
 
 
 Justin Maggard
+
+==================
+
+create a directory "/var/lib/minidlna-tvheadend/services/Live TV"
+create a directory "/var/lib/minidlna-tvheadend/minidlna"
+use get-channels.sh to create .url files in "Live TV"
+
+use e.g. this config as /etc/minidlna.conf:
+
+port=8200
+network_interface=eth0
+media_dir=/var/lib/minidlna-tvheadend/services
+db_dir=/var/lib/minidlna-tvheadend/minidlna
+album_art_names=Cover.jpg/cover.jpg/AlbumArtSmall.jpg/albumartsmall.jpg/AlbumArt.jpg/albumart.jpg/Album.jpg/album.jpg/Folder.jpg/folder.jpg/Thumb.jpg/thumb.jpg
+inotify=yes
+enable_tivo=no
+strict_dlna=no
+notify_interval=900
+serial=
+model_number=1.0
+root_container=.
+
+and start with "minidlnad -P /var/run/minidlnad.pid -f /etc/minidlna.conf"
