@@ -445,6 +445,59 @@ insert_directory(const char *name, const char *path, const char *base, const cha
 	return detailID;
 }
 
+#define LOCAL_BUFF_SIZE 256
+
+int64_t insert_sat2ip_service(const char *path, char *name)
+{
+    int64_t ret = 0;
+    char time_string[LOCAL_BUFF_SIZE], title[LOCAL_BUFF_SIZE];
+    FILE* file = NULL;
+
+    const char dlna_pn[] = "MPEG_TS_SD_EU_ISO;DLNA.ORG_OP=01;DLNA.ORG_CI=0";
+    const char mime[] = "video/mpeg";
+    const char resolution[] = "720x576";
+    // int audioChannels = 2;
+    time_t tt = time(NULL);
+
+    do {
+        file = fopen(path, "r");
+        if(!file) {
+            DPRINTF(E_DEBUG, L_SCANNER, "insert_sat2ip_service() error opening file '%s'\n", path);
+            break;
+        }
+
+        size_t n = fread(title, 1, LOCAL_BUFF_SIZE, file);
+        if(!n) {
+            DPRINTF(E_DEBUG, L_SCANNER, "insert_sat2ip_service() error reading title\n");
+            break;
+        }
+
+        title[n] = '\0';
+
+        strftime(time_string, sizeof(time_string), "%FT%T\r\n", gmtime(&tt));
+        strip_ext(name);
+        DPRINTF(E_DEBUG, L_SCANNER, "Adding service %s: '%s'\n", name, title);
+        // ret = sql_exec(db, "INSERT into DETAILS "
+        //                "(PATH, DATE, CHANNELS, RESOLUTION, TITLE, DLNA_PN, MIME) "
+        //                "VALUES "
+        //                "(%Q, %Q, %Q, %Q, '%q', %Q, '%q');",
+        //                name, time_string, audioChannels, resolution, title, dlna_pn, mime);
+        ret = sql_exec(db, "INSERT into DETAILS "
+                       "(PATH, DATE, RESOLUTION, TITLE, DLNA_PN, MIME) "
+                       "VALUES "
+                       "(%Q, %Q, %Q, '%q', %Q, '%q');",
+                       name, time_string, resolution, title, dlna_pn, mime);
+        if( ret != SQLITE_OK ) {
+            DPRINTF(E_ERROR, L_SCANNER, "Error inserting details for %s: '%s'!\n", name, title);
+            ret = 0;
+        } else {
+            ret = sqlite3_last_insert_rowid(db);
+            DPRINTF(E_DEBUG, L_SCANNER, "Inserted service '%s' at %d row\n", title, ret);
+        }
+   } while(0);
+    return ret;
+ }
+
 int
 insert_file(char *name, const char *path, const char *parentID, int object, media_types types)
 {
@@ -455,6 +508,16 @@ insert_file(char *name, const char *path, const char *parentID, int object, medi
 	char *typedir_parentID;
 	char *baseid;
 	char *orig_name = NULL;
+
+    if( is_assets_list(name) )
+    {
+        orig_name = strdup(name);
+        strcpy(base, VIDEO_LIVE_ID);
+        strcpy(class, "item.videoItem.videoBroadcast");
+        detailID = insert_sat2ip_service(path, name);
+        if(!detailID)
+            strcpy(name, orig_name);
+    }
 
 	if( (types & TYPE_IMAGES) && is_image(name) )
 	{
@@ -538,7 +601,7 @@ CreateDatabase(void)
 	                        VIDEO_ID, "0", _("Video"),
 	                    VIDEO_ALL_ID, VIDEO_ID, _("All Video"),
 	                    VIDEO_DIR_ID, VIDEO_ID, _("Folders"),
-
+                        VIDEO_LIVE_ID, VIDEO_ID, _(SAT2IP_FOLDER),
 	                        IMAGE_ID, "0", _("Pictures"),
 	                    IMAGE_ALL_ID, IMAGE_ID, _("All Pictures"),
 	                   IMAGE_DATE_ID, IMAGE_ID, _("Date Taken"),
@@ -653,6 +716,7 @@ filter_av(scan_filter *d)
 		  (is_reg(d) &&
 		   (is_audio(d->d_name) ||
 		    is_video(d->d_name) ||
+		    is_assets_list(d->d_name) ||
 	            is_playlist(d->d_name))))
 	       );
 }
@@ -665,6 +729,7 @@ filter_ap(scan_filter *d)
 		  (is_reg(d) &&
 		   (is_audio(d->d_name) ||
 		    is_image(d->d_name) ||
+		    is_assets_list(d->d_name) ||
 	            is_playlist(d->d_name))))
 	       );
 }
@@ -674,8 +739,9 @@ filter_v(scan_filter *d)
 {
 	return ( filter_hidden(d) &&
 	         (filter_type(d) ||
-		  (is_reg(d) &&
-	           is_video(d->d_name)))
+		  (is_reg(d) && (
+                    is_assets_list(d->d_name) ||
+	           is_video(d->d_name))))
 	       );
 }
 
@@ -686,6 +752,7 @@ filter_vp(scan_filter *d)
 	         (filter_type(d) ||
 		  (is_reg(d) &&
 		   (is_video(d->d_name) ||
+		   is_assets_list(d->d_name) ||
 	            is_image(d->d_name))))
 	       );
 }
@@ -709,6 +776,7 @@ filter_avp(scan_filter *d)
 		   (is_audio(d->d_name) ||
 		    is_image(d->d_name) ||
 		    is_video(d->d_name) ||
+		    is_assets_list(d->d_name) ||
 	            is_playlist(d->d_name))))
 	       );
 }

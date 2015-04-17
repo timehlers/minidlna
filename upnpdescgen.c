@@ -122,6 +122,15 @@ static const char root_device[] =
 #endif
 	;
 
+#define ROOTDEV_MANUFACTURERURL_MAX_LEN	128
+char rootdev_manufacturerurl[ROOTDEV_MANUFACTURERURL_MAX_LEN] = ROOTDEV_MANUFACTURERURL;
+#define ROOTDEV_MANUFACTURER_MAX_LEN	128
+char rootdev_manufacturer[ROOTDEV_MANUFACTURER_MAX_LEN] = ROOTDEV_MANUFACTURER;
+#define ROOTDEV_MODELURL_MAX_LEN	128
+char rootdev_modelurl[ROOTDEV_MODELURL_MAX_LEN] = ROOTDEV_MODELURL;
+#define ROOTDEV_MODELDESCRIPTION_MAX_LEN	128
+char rootdev_modeldescription[ROOTDEV_MODELDESCRIPTION_MAX_LEN] = ROOTDEV_MODELDESCRIPTION;
+
 /* root Description of the UPnP Device */
 static const struct XMLElt rootDesc[] =
 {
@@ -139,12 +148,12 @@ static const struct XMLElt rootDesc[] =
 	{"/microsoft:magicPacketWakeSupported xmlns:microsoft=\"urn:schemas-microsoft-com:WMPNSS-1-0\"", "0"},
 #endif
 	{"/friendlyName", friendly_name},	/* required */
-	{"/manufacturer", ROOTDEV_MANUFACTURER},		/* required */
-	{"/manufacturerURL", ROOTDEV_MANUFACTURERURL},	/* optional */
-	{"/modelDescription", ROOTDEV_MODELDESCRIPTION}, /* recommended */
+	{"/manufacturer", rootdev_manufacturer},		/* required */
+	{"/manufacturerURL", rootdev_manufacturerurl},	/* optional */
+	{"/modelDescription", rootdev_modeldescription}, /* recommended */
 	{"/modelName", modelname},	/* required */
 	{"/modelNumber", modelnumber},
-	{"/modelURL", ROOTDEV_MODELURL},
+	{"/modelURL", rootdev_modelurl},
 	{"/serialNumber", serialnumber},
 	{"/UDN", uuidvalue},	/* required */
 	{"/dlna:X_DLNADOC xmlns:dlna=\"urn:schemas-dlna-org:device-1-0\"", "DMS-1.50"},
@@ -793,3 +802,59 @@ getVarsX_MS_MediaReceiverRegistrar(int * l)
 	                    "urn:microsoft.com:service:X_MS_MediaReceiverRegistrar:1");
 }
 
+void upnpdescgen_setCustomerId(const char *customerName, const char* customerId)
+{
+	if ((!strcmp(customerName,"TELESTAR")) || (customerId && strcasecmp(customerId, "DIGIBIT")==0))
+	{
+		static const char* ROOTDEV_MANUFACTURERURL_TELESTAR = "http://www.telestar.de/";
+		static const char* ROOTDEV_MANUFACTURER_TELESTAR	=	"TELESTAR-DIGITAL";
+		static const char* ROOTDEV_MODELNAME_TELESTAR	=	"DIGIBIT-R1";
+		static const char* ROOTDEV_MODELURL_TELESTAR	=	"";
+		static const char* ROOTDEV_MODELDESCRIPTION_TELESTAR	=	"DIGIBIT-R1 Media Server";
+
+		strncpy(rootdev_manufacturerurl, ROOTDEV_MANUFACTURERURL_TELESTAR, sizeof(rootdev_manufacturerurl));
+		rootdev_manufacturerurl[sizeof(rootdev_manufacturerurl)-1] = 0;
+		strncpy(rootdev_manufacturer, ROOTDEV_MANUFACTURER_TELESTAR, sizeof(rootdev_manufacturer));
+		rootdev_manufacturer[sizeof(rootdev_manufacturer)-1] = 0;
+		strncpy(modelname, ROOTDEV_MODELNAME_TELESTAR, MODELNAME_MAX_LEN);
+		modelname[MODELNAME_MAX_LEN-1] = 0;
+		strncpy(rootdev_modelurl, ROOTDEV_MODELURL_TELESTAR, sizeof(rootdev_modelurl));
+		rootdev_modelurl[sizeof(rootdev_modelurl)-1] = 0;
+		strncpy(rootdev_modeldescription, ROOTDEV_MODELDESCRIPTION_TELESTAR, sizeof(rootdev_modeldescription));
+		rootdev_modeldescription[sizeof(rootdev_modeldescription)-1] = 0;
+	} else if ((!strcmp(customerName,"GSS")) || (customerId && strcasecmp(customerId, "GSSBOX")==0)) {
+		static const char* ROOTDEV_MANUFACTURERURL_GSS = "http://www.gss.de/";
+		static const char* ROOTDEV_MANUFACTURER_GSS	=	"GSS";
+		static const char* ROOTDEV_MODELNAME_GSS	=	"GSS.BOX";
+		static const char* ROOTDEV_MODELURL_GSS	=	"";
+		static const char* ROOTDEV_MODELDESCRIPTION_GSS	=	"GSS.BOX Media Server";
+
+		strncpy(rootdev_manufacturerurl, ROOTDEV_MANUFACTURERURL_GSS, sizeof(rootdev_manufacturerurl));
+		rootdev_manufacturerurl[sizeof(rootdev_manufacturerurl)-1] = 0;
+		strncpy(rootdev_manufacturer, ROOTDEV_MANUFACTURER_GSS, sizeof(rootdev_manufacturer));
+		rootdev_manufacturer[sizeof(rootdev_manufacturer)-1] = 0;
+		strncpy(modelname, ROOTDEV_MODELNAME_GSS, MODELNAME_MAX_LEN);
+		modelname[MODELNAME_MAX_LEN-1] = 0;
+		strncpy(rootdev_modelurl, ROOTDEV_MODELURL_GSS, sizeof(rootdev_modelurl));
+		rootdev_modelurl[sizeof(rootdev_modelurl)-1] = 0;
+		strncpy(rootdev_modeldescription, ROOTDEV_MODELDESCRIPTION_GSS, sizeof(rootdev_modeldescription));
+		rootdev_modeldescription[sizeof(rootdev_modeldescription)-1] = 0;
+	} else if ((!strcmp(customerName,"TECHNISAT")) || (customerId && strcasecmp(customerId, "SKYSTAR")==0)) {
+		static const char* ROOTDEV_MANUFACTURERURL_TECHNISAT = "http://www.technisat.de/";
+		static const char* ROOTDEV_MANUFACTURER_TECHNISAT	=	"TECHNISAT";
+		static const char* ROOTDEV_MODELNAME_TECHNISAT	=	"SkyStar";
+		static const char* ROOTDEV_MODELURL_TECHNISAT	=	"";
+		static const char* ROOTDEV_MODELDESCRIPTION_TECHNISAT	=	"SkyStar Media Server";
+
+		strncpy(rootdev_manufacturerurl, ROOTDEV_MANUFACTURERURL_TECHNISAT, sizeof(rootdev_manufacturerurl));
+		rootdev_manufacturerurl[sizeof(rootdev_manufacturerurl)-1] = 0;
+		strncpy(rootdev_manufacturer, ROOTDEV_MANUFACTURER_TECHNISAT, sizeof(rootdev_manufacturer));
+		rootdev_manufacturer[sizeof(rootdev_manufacturer)-1] = 0;
+		strncpy(modelname, ROOTDEV_MODELNAME_TECHNISAT, MODELNAME_MAX_LEN);
+		modelname[MODELNAME_MAX_LEN-1] = 0;
+		strncpy(rootdev_modelurl, ROOTDEV_MODELURL_TECHNISAT, sizeof(rootdev_modelurl));
+		rootdev_modelurl[sizeof(rootdev_modelurl)-1] = 0;
+		strncpy(rootdev_modeldescription, ROOTDEV_MODELDESCRIPTION_TECHNISAT, sizeof(rootdev_modeldescription));
+		rootdev_modeldescription[sizeof(rootdev_modeldescription)-1] = 0;
+	}
+}

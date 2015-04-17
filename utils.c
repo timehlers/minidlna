@@ -370,6 +370,11 @@ mime_to_ext(const char * mime)
 	return "dat";
 }
 
+int is_assets_list(const char * file)
+{
+	return ends_with(file, ".url");
+}
+
 int
 is_video(const char * file)
 {

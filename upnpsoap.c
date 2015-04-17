@@ -695,7 +695,7 @@ add_resized_res(int srcw, int srch, int reqw, int reqh, char *dlna_pn,
 inline static void
 add_res(char *size, char *duration, char *bitrate, char *sampleFrequency,
         char *nrAudioChannels, char *resolution, char *dlna_pn, char *mime,
-        char *detailID, const char *ext, struct Response *args)
+        char *detailID, const char *ext, struct Response *args, char *class)
 {
 	strcatf(args->str, "&lt;res ");
 	if( size && (args->filter & FILTER_RES_SIZE) ) {
@@ -730,11 +730,34 @@ add_res(char *size, char *duration, char *bitrate, char *sampleFrequency,
 			                lan_addr[args->iface].str, runtime_vars.port, detailID);
 		}
 	}
+    {
+        char str[256] = {0};
+        char *token, *saveptr, *last = NULL;
+
+        strncpy(str, class, 256);
+        for(token = str;; token = NULL) {
+            token = strtok_r(token, ".", &saveptr);
+            if(!token)
+                break;
+            last = token;
+        }
+        if(strncmp(last, "videoBroadcast", 256) == 0) {
+            char *path = sql_get_text_field(db, "SELECT PATH from DETAILS where ID = '%s'", detailID);
+            if( !path ) {
+                DPRINTF(E_WARN, L_HTTP, "DETAIL ID %s not found, responding ERROR 404\n", detailID);
+            }
+
+            strcatf(args->str, "protocolInfo=\"http-get:*:%s:%s\"&gt;"
+                    "http://%s:8080/stream/channelid/%s &lt;/res&gt;",
+                    mime, dlna_pn, lan_addr[args->iface].str, path);
+        } else {
 	strcatf(args->str, "protocolInfo=\"http-get:*:%s:%s\"&gt;"
 	                          "http://%s:%d/MediaItems/%s.%s"
 	                          "&lt;/res&gt;",
 	                          mime, dlna_pn, lan_addr[args->iface].str,
 	                          runtime_vars.port, detailID, ext);
+        }
+    }
 }
 
 static int
@@ -963,7 +986,7 @@ callback(void *args, int argc, char **argv, char **azColName)
 		if( passed_args->filter & FILTER_RES ) {
 			ext = mime_to_ext(mime);
 			add_res(size, duration, bitrate, sampleFrequency, nrAudioChannels,
-			        resolution, dlna_buf, mime, detailID, ext, passed_args);
+			        resolution, dlna_buf, mime, detailID, ext, passed_args, class);
 			if( *mime == 'i' ) {
 				int srcw, srch;
 				if( resolution && (sscanf(resolution, "%6dx%6d", &srcw, &srch) == 2) )
@@ -996,7 +1019,7 @@ callback(void *args, int argc, char **argv, char **azColName)
 					{
 						sprintf(dlna_buf, "DLNA.ORG_PN=%s;DLNA.ORG_OP=01;DLNA.ORG_CI=1", "MPEG_PS_NTSC");
 						add_res(size, duration, bitrate, sampleFrequency, nrAudioChannels,
-						        resolution, dlna_buf, mime, detailID, ext, passed_args);
+						        resolution, dlna_buf, mime, detailID, ext, passed_args, class);
 					}
 					break;
 				case ESonyBDP:
@@ -1008,13 +1031,13 @@ callback(void *args, int argc, char **argv, char **azColName)
 						{
 							sprintf(dlna_buf, "DLNA.ORG_PN=%s;DLNA.ORG_OP=01;DLNA.ORG_CI=1", "MPEG_TS_SD_NA");
 							add_res(size, duration, bitrate, sampleFrequency, nrAudioChannels,
-							        resolution, dlna_buf, mime, detailID, ext, passed_args);
+							        resolution, dlna_buf, mime, detailID, ext, passed_args, class);
 						}
 						if( strncmp(dlna_pn, "MPEG_TS_SD_EU", 13) != 0 )
 						{
 							sprintf(dlna_buf, "DLNA.ORG_PN=%s;DLNA.ORG_OP=01;DLNA.ORG_CI=1", "MPEG_TS_SD_EU");
 							add_res(size, duration, bitrate, sampleFrequency, nrAudioChannels,
-							        resolution, dlna_buf, mime, detailID, ext, passed_args);
+							        resolution, dlna_buf, mime, detailID, ext, passed_args, class);
 						}
 					}
 					else if( (dlna_pn &&
@@ -1029,13 +1052,13 @@ callback(void *args, int argc, char **argv, char **azColName)
 						{
 							sprintf(dlna_buf, "DLNA.ORG_PN=%s;DLNA.ORG_OP=01;DLNA.ORG_CI=1", "MPEG_PS_NTSC");
 							add_res(size, duration, bitrate, sampleFrequency, nrAudioChannels,
-						        	resolution, dlna_buf, mime, detailID, ext, passed_args);
+						        	resolution, dlna_buf, mime, detailID, ext, passed_args, class);
 						}
 						if( !dlna_pn || strncmp(dlna_pn, "MPEG_PS_PAL", 11) != 0 )
 						{
 							sprintf(dlna_buf, "DLNA.ORG_PN=%s;DLNA.ORG_OP=01;DLNA.ORG_CI=1", "MPEG_PS_PAL");
 							add_res(size, duration, bitrate, sampleFrequency, nrAudioChannels,
-						        	resolution, dlna_buf, mime, detailID, ext, passed_args);
+						        	resolution, dlna_buf, mime, detailID, ext, passed_args, class);
 						}
 					}
 					break;
@@ -1049,7 +1072,7 @@ callback(void *args, int argc, char **argv, char **azColName)
 					{
 					        sprintf(dlna_buf, "DLNA.ORG_PN=AVC_TS_HD_50_AC3%s", dlna_pn + 16);
 						add_res(size, duration, bitrate, sampleFrequency, nrAudioChannels,
-						        resolution, dlna_buf, mime, detailID, ext, passed_args);
+						        resolution, dlna_buf, mime, detailID, ext, passed_args, class);
 					}
 					break;
 				case ESamsungSeriesCDE:

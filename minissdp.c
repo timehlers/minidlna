@@ -275,13 +275,13 @@ SendSSDPNotifies(int s, const char *host, unsigned short port,
 		{
 			l = snprintf(bufr, sizeof(bufr), 
 					"NOTIFY * HTTP/1.1\r\n"
-					"HOST:%s:%d\r\n"
-					"CACHE-CONTROL:max-age=%u\r\n"
-					"LOCATION:http://%s:%d" ROOTDESC_PATH"\r\n"
-					"SERVER: " MINIDLNA_SERVER_STRING "\r\n"
-					"NT:%s%s\r\n"
-					"USN:%s%s%s%s\r\n"
-					"NTS:ssdp:alive\r\n"
+					"Host: %s:%d\r\n"
+					"Cache-Control: max-age=%u\r\n"
+					"Location: http://%s:%d" ROOTDESC_PATH"\r\n"
+					"Server: " MINIDLNA_SERVER_STRING "\r\n"
+					"NT: %s%s\r\n"
+					"USN: %s%s%s%s\r\n"
+					"NTS: ssdp:alive\r\n"
 					"\r\n",
 					SSDP_MCAST_ADDR, SSDP_PORT,
 					lifetime,

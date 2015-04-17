@@ -47,6 +47,7 @@
 #define VIDEO_PLIST_ID		"2$10"
 #define VIDEO_DIR_ID		"2$15"
 #define VIDEO_RATING_ID		"2$200"
+#define VIDEO_LIVE_ID		"2$210"
 
 #define IMAGE_ID		"3"
 #define IMAGE_ALL_ID		"3$B"
@@ -56,8 +57,11 @@
 #define IMAGE_PLIST_ID		"3$11"
 #define IMAGE_DIR_ID		"3$16"
 #define IMAGE_RATING_ID		"3$300"
+#define SAT2IP_FOLDER  "SAT2IP"
 
 extern int valid_cache;
+
+int is_assets_list(const char * file);
 
 int
 is_video(const char *file);

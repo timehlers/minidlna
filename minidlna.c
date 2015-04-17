@@ -71,6 +71,8 @@
 
 #include "config.h"
 
+#include <sys/utsname.h>
+
 #ifdef ENABLE_NLS
 #include <locale.h>
 #include <libintl.h>
@@ -946,7 +948,10 @@ init(int argc, char **argv)
 	if (presurl)
 		strncpyt(presentationurl, presurl, PRESENTATIONURL_MAX_LEN);
 	else
-		strcpy(presentationurl, "/");
+	{
+		snprintf(presentationurl, PRESENTATIONURL_MAX_LEN,
+		         "http://%s:8080/", lan_addr[0].str);
+	}
 
 	/* set signal handlers */
 	memset(&sa, 0, sizeof(struct sigaction));
