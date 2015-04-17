@@ -1,0 +1,422 @@
+diff -u -urN minidlna-1.1.4/minidlna.c minidlna-1.1.4.idl4k/minidlna.c
+--- minidlna-1.1.4/minidlna.c	2014-08-26 23:09:22.000000000 +0200
++++ minidlna-1.1.4.idl4k/minidlna.c	2015-04-17 21:52:22.000000000 +0200
+@@ -71,6 +71,8 @@
+ 
+ #include "config.h"
+ 
++#include <sys/utsname.h>
++
+ #ifdef ENABLE_NLS
+ #include <locale.h>
+ #include <libintl.h>
+@@ -946,7 +948,10 @@
+ 	if (presurl)
+ 		strncpyt(presentationurl, presurl, PRESENTATIONURL_MAX_LEN);
+ 	else
+-		strcpy(presentationurl, "/");
++	{
++		snprintf(presentationurl, PRESENTATIONURL_MAX_LEN,
++		         "http://%s:8080/", lan_addr[0].str);
++	}
+ 
+ 	/* set signal handlers */
+ 	memset(&sa, 0, sizeof(struct sigaction));
+diff -u -urN minidlna-1.1.4/minissdp.c minidlna-1.1.4.idl4k/minissdp.c
+--- minidlna-1.1.4/minissdp.c	2014-08-26 23:09:22.000000000 +0200
++++ minidlna-1.1.4.idl4k/minissdp.c	2015-04-17 21:34:00.000000000 +0200
+@@ -275,13 +275,13 @@
+ 		{
+ 			l = snprintf(bufr, sizeof(bufr), 
+ 					"NOTIFY * HTTP/1.1\r\n"
+-					"HOST:%s:%d\r\n"
+-					"CACHE-CONTROL:max-age=%u\r\n"
+-					"LOCATION:http://%s:%d" ROOTDESC_PATH"\r\n"
+-					"SERVER: " MINIDLNA_SERVER_STRING "\r\n"
+-					"NT:%s%s\r\n"
+-					"USN:%s%s%s%s\r\n"
+-					"NTS:ssdp:alive\r\n"
++					"Host: %s:%d\r\n"
++					"Cache-Control: max-age=%u\r\n"
++					"Location: http://%s:%d" ROOTDESC_PATH"\r\n"
++					"Server: " MINIDLNA_SERVER_STRING "\r\n"
++					"NT: %s%s\r\n"
++					"USN: %s%s%s%s\r\n"
++					"NTS: ssdp:alive\r\n"
+ 					"\r\n",
+ 					SSDP_MCAST_ADDR, SSDP_PORT,
+ 					lifetime,
+diff -u -urN minidlna-1.1.4/scanner.c minidlna-1.1.4.idl4k/scanner.c
+--- minidlna-1.1.4/scanner.c	2014-08-26 23:09:22.000000000 +0200
++++ minidlna-1.1.4.idl4k/scanner.c	2015-04-17 21:55:36.000000000 +0200
+@@ -445,6 +445,59 @@
+ 	return detailID;
+ }
+ 
++#define LOCAL_BUFF_SIZE 256
++
++int64_t insert_sat2ip_service(const char *path, char *name)
++{
++    int64_t ret = 0;
++    char time_string[LOCAL_BUFF_SIZE], title[LOCAL_BUFF_SIZE];
++    FILE* file = NULL;
++
++    const char dlna_pn[] = "MPEG_TS_SD_EU_ISO;DLNA.ORG_OP=01;DLNA.ORG_CI=0";
++    const char mime[] = "video/mpeg";
++    const char resolution[] = "720x576";
++    // int audioChannels = 2;
++    time_t tt = time(NULL);
++
++    do {
++        file = fopen(path, "r");
++        if(!file) {
++            DPRINTF(E_DEBUG, L_SCANNER, "insert_sat2ip_service() error opening file '%s'\n", path);
++            break;
++        }
++
++        size_t n = fread(title, 1, LOCAL_BUFF_SIZE, file);
++        if(!n) {
++            DPRINTF(E_DEBUG, L_SCANNER, "insert_sat2ip_service() error reading title\n");
++            break;
++        }
++
++        title[n] = '\0';
++
++        strftime(time_string, sizeof(time_string), "%FT%T\r\n", gmtime(&tt));
++        strip_ext(name);
++        DPRINTF(E_DEBUG, L_SCANNER, "Adding service %s: '%s'\n", name, title);
++        // ret = sql_exec(db, "INSERT into DETAILS "
++        //                "(PATH, DATE, CHANNELS, RESOLUTION, TITLE, DLNA_PN, MIME) "
++        //                "VALUES "
++        //                "(%Q, %Q, %Q, %Q, '%q', %Q, '%q');",
++        //                name, time_string, audioChannels, resolution, title, dlna_pn, mime);
++        ret = sql_exec(db, "INSERT into DETAILS "
++                       "(PATH, DATE, RESOLUTION, TITLE, DLNA_PN, MIME) "
++                       "VALUES "
++                       "(%Q, %Q, %Q, '%q', %Q, '%q');",
++                       name, time_string, resolution, title, dlna_pn, mime);
++        if( ret != SQLITE_OK ) {
++            DPRINTF(E_ERROR, L_SCANNER, "Error inserting details for %s: '%s'!\n", name, title);
++            ret = 0;
++        } else {
++            ret = sqlite3_last_insert_rowid(db);
++            DPRINTF(E_DEBUG, L_SCANNER, "Inserted service '%s' at %d row\n", title, ret);
++        }
++   } while(0);
++    return ret;
++ }
++
+ int
+ insert_file(char *name, const char *path, const char *parentID, int object, media_types types)
+ {
+@@ -456,6 +509,16 @@
+ 	char *baseid;
+ 	char *orig_name = NULL;
+ 
++    if( is_assets_list(name) )
++    {
++        orig_name = strdup(name);
++        strcpy(base, VIDEO_LIVE_ID);
++        strcpy(class, "item.videoItem.videoBroadcast");
++        detailID = insert_sat2ip_service(path, name);
++        if(!detailID)
++            strcpy(name, orig_name);
++    }
++
+ 	if( (types & TYPE_IMAGES) && is_image(name) )
+ 	{
+ 		if( is_album_art(name) )
+@@ -538,7 +601,7 @@
+ 	                        VIDEO_ID, "0", _("Video"),
+ 	                    VIDEO_ALL_ID, VIDEO_ID, _("All Video"),
+ 	                    VIDEO_DIR_ID, VIDEO_ID, _("Folders"),
+-
++                        VIDEO_LIVE_ID, VIDEO_ID, _(SAT2IP_FOLDER),
+ 	                        IMAGE_ID, "0", _("Pictures"),
+ 	                    IMAGE_ALL_ID, IMAGE_ID, _("All Pictures"),
+ 	                   IMAGE_DATE_ID, IMAGE_ID, _("Date Taken"),
+@@ -653,6 +716,7 @@
+ 		  (is_reg(d) &&
+ 		   (is_audio(d->d_name) ||
+ 		    is_video(d->d_name) ||
++		    is_assets_list(d->d_name) ||
+ 	            is_playlist(d->d_name))))
+ 	       );
+ }
+@@ -665,6 +729,7 @@
+ 		  (is_reg(d) &&
+ 		   (is_audio(d->d_name) ||
+ 		    is_image(d->d_name) ||
++		    is_assets_list(d->d_name) ||
+ 	            is_playlist(d->d_name))))
+ 	       );
+ }
+@@ -674,8 +739,9 @@
+ {
+ 	return ( filter_hidden(d) &&
+ 	         (filter_type(d) ||
+-		  (is_reg(d) &&
+-	           is_video(d->d_name)))
++		  (is_reg(d) && (
++                    is_assets_list(d->d_name) ||
++	           is_video(d->d_name))))
+ 	       );
+ }
+ 
+@@ -686,6 +752,7 @@
+ 	         (filter_type(d) ||
+ 		  (is_reg(d) &&
+ 		   (is_video(d->d_name) ||
++		   is_assets_list(d->d_name) ||
+ 	            is_image(d->d_name))))
+ 	       );
+ }
+@@ -709,6 +776,7 @@
+ 		   (is_audio(d->d_name) ||
+ 		    is_image(d->d_name) ||
+ 		    is_video(d->d_name) ||
++		    is_assets_list(d->d_name) ||
+ 	            is_playlist(d->d_name))))
+ 	       );
+ }
+diff -u -urN minidlna-1.1.4/scanner.h minidlna-1.1.4.idl4k/scanner.h
+--- minidlna-1.1.4/scanner.h	2014-08-26 23:09:22.000000000 +0200
++++ minidlna-1.1.4.idl4k/scanner.h	2015-04-17 21:16:28.000000000 +0200
+@@ -47,6 +47,7 @@
+ #define VIDEO_PLIST_ID		"2$10"
+ #define VIDEO_DIR_ID		"2$15"
+ #define VIDEO_RATING_ID		"2$200"
++#define VIDEO_LIVE_ID		"2$210"
+ 
+ #define IMAGE_ID		"3"
+ #define IMAGE_ALL_ID		"3$B"
+@@ -56,9 +57,12 @@
+ #define IMAGE_PLIST_ID		"3$11"
+ #define IMAGE_DIR_ID		"3$16"
+ #define IMAGE_RATING_ID		"3$300"
++#define SAT2IP_FOLDER  "SAT2IP"
+ 
+ extern int valid_cache;
+ 
++int is_assets_list(const char * file);
++
+ int
+ is_video(const char *file);
+ 
+diff -u -urN minidlna-1.1.4/upnpdescgen.c minidlna-1.1.4.idl4k/upnpdescgen.c
+--- minidlna-1.1.4/upnpdescgen.c	2014-08-26 23:09:22.000000000 +0200
++++ minidlna-1.1.4.idl4k/upnpdescgen.c	2015-04-17 21:45:16.000000000 +0200
+@@ -122,6 +122,15 @@
+ #endif
+ 	;
+ 
++#define ROOTDEV_MANUFACTURERURL_MAX_LEN	128
++char rootdev_manufacturerurl[ROOTDEV_MANUFACTURERURL_MAX_LEN] = ROOTDEV_MANUFACTURERURL;
++#define ROOTDEV_MANUFACTURER_MAX_LEN	128
++char rootdev_manufacturer[ROOTDEV_MANUFACTURER_MAX_LEN] = ROOTDEV_MANUFACTURER;
++#define ROOTDEV_MODELURL_MAX_LEN	128
++char rootdev_modelurl[ROOTDEV_MODELURL_MAX_LEN] = ROOTDEV_MODELURL;
++#define ROOTDEV_MODELDESCRIPTION_MAX_LEN	128
++char rootdev_modeldescription[ROOTDEV_MODELDESCRIPTION_MAX_LEN] = ROOTDEV_MODELDESCRIPTION;
++
+ /* root Description of the UPnP Device */
+ static const struct XMLElt rootDesc[] =
+ {
+@@ -139,12 +148,12 @@
+ 	{"/microsoft:magicPacketWakeSupported xmlns:microsoft=\"urn:schemas-microsoft-com:WMPNSS-1-0\"", "0"},
+ #endif
+ 	{"/friendlyName", friendly_name},	/* required */
+-	{"/manufacturer", ROOTDEV_MANUFACTURER},		/* required */
+-	{"/manufacturerURL", ROOTDEV_MANUFACTURERURL},	/* optional */
+-	{"/modelDescription", ROOTDEV_MODELDESCRIPTION}, /* recommended */
++	{"/manufacturer", rootdev_manufacturer},		/* required */
++	{"/manufacturerURL", rootdev_manufacturerurl},	/* optional */
++	{"/modelDescription", rootdev_modeldescription}, /* recommended */
+ 	{"/modelName", modelname},	/* required */
+ 	{"/modelNumber", modelnumber},
+-	{"/modelURL", ROOTDEV_MODELURL},
++	{"/modelURL", rootdev_modelurl},
+ 	{"/serialNumber", serialnumber},
+ 	{"/UDN", uuidvalue},	/* required */
+ 	{"/dlna:X_DLNADOC xmlns:dlna=\"urn:schemas-dlna-org:device-1-0\"", "DMS-1.50"},
+@@ -793,3 +802,59 @@
+ 	                    "urn:microsoft.com:service:X_MS_MediaReceiverRegistrar:1");
+ }
+ 
++void upnpdescgen_setCustomerId(const char *customerName, const char* customerId)
++{
++	if ((!strcmp(customerName,"TELESTAR")) || (customerId && strcasecmp(customerId, "DIGIBIT")==0))
++	{
++		static const char* ROOTDEV_MANUFACTURERURL_TELESTAR = "http://www.telestar.de/";
++		static const char* ROOTDEV_MANUFACTURER_TELESTAR	=	"TELESTAR-DIGITAL";
++		static const char* ROOTDEV_MODELNAME_TELESTAR	=	"DIGIBIT-R1";
++		static const char* ROOTDEV_MODELURL_TELESTAR	=	"";
++		static const char* ROOTDEV_MODELDESCRIPTION_TELESTAR	=	"DIGIBIT-R1 Media Server";
++
++		strncpy(rootdev_manufacturerurl, ROOTDEV_MANUFACTURERURL_TELESTAR, sizeof(rootdev_manufacturerurl));
++		rootdev_manufacturerurl[sizeof(rootdev_manufacturerurl)-1] = 0;
++		strncpy(rootdev_manufacturer, ROOTDEV_MANUFACTURER_TELESTAR, sizeof(rootdev_manufacturer));
++		rootdev_manufacturer[sizeof(rootdev_manufacturer)-1] = 0;
++		strncpy(modelname, ROOTDEV_MODELNAME_TELESTAR, MODELNAME_MAX_LEN);
++		modelname[MODELNAME_MAX_LEN-1] = 0;
++		strncpy(rootdev_modelurl, ROOTDEV_MODELURL_TELESTAR, sizeof(rootdev_modelurl));
++		rootdev_modelurl[sizeof(rootdev_modelurl)-1] = 0;
++		strncpy(rootdev_modeldescription, ROOTDEV_MODELDESCRIPTION_TELESTAR, sizeof(rootdev_modeldescription));
++		rootdev_modeldescription[sizeof(rootdev_modeldescription)-1] = 0;
++	} else if ((!strcmp(customerName,"GSS")) || (customerId && strcasecmp(customerId, "GSSBOX")==0)) {
++		static const char* ROOTDEV_MANUFACTURERURL_GSS = "http://www.gss.de/";
++		static const char* ROOTDEV_MANUFACTURER_GSS	=	"GSS";
++		static const char* ROOTDEV_MODELNAME_GSS	=	"GSS.BOX";
++		static const char* ROOTDEV_MODELURL_GSS	=	"";
++		static const char* ROOTDEV_MODELDESCRIPTION_GSS	=	"GSS.BOX Media Server";
++
++		strncpy(rootdev_manufacturerurl, ROOTDEV_MANUFACTURERURL_GSS, sizeof(rootdev_manufacturerurl));
++		rootdev_manufacturerurl[sizeof(rootdev_manufacturerurl)-1] = 0;
++		strncpy(rootdev_manufacturer, ROOTDEV_MANUFACTURER_GSS, sizeof(rootdev_manufacturer));
++		rootdev_manufacturer[sizeof(rootdev_manufacturer)-1] = 0;
++		strncpy(modelname, ROOTDEV_MODELNAME_GSS, MODELNAME_MAX_LEN);
++		modelname[MODELNAME_MAX_LEN-1] = 0;
++		strncpy(rootdev_modelurl, ROOTDEV_MODELURL_GSS, sizeof(rootdev_modelurl));
++		rootdev_modelurl[sizeof(rootdev_modelurl)-1] = 0;
++		strncpy(rootdev_modeldescription, ROOTDEV_MODELDESCRIPTION_GSS, sizeof(rootdev_modeldescription));
++		rootdev_modeldescription[sizeof(rootdev_modeldescription)-1] = 0;
++	} else if ((!strcmp(customerName,"TECHNISAT")) || (customerId && strcasecmp(customerId, "SKYSTAR")==0)) {
++		static const char* ROOTDEV_MANUFACTURERURL_TECHNISAT = "http://www.technisat.de/";
++		static const char* ROOTDEV_MANUFACTURER_TECHNISAT	=	"TECHNISAT";
++		static const char* ROOTDEV_MODELNAME_TECHNISAT	=	"SkyStar";
++		static const char* ROOTDEV_MODELURL_TECHNISAT	=	"";
++		static const char* ROOTDEV_MODELDESCRIPTION_TECHNISAT	=	"SkyStar Media Server";
++
++		strncpy(rootdev_manufacturerurl, ROOTDEV_MANUFACTURERURL_TECHNISAT, sizeof(rootdev_manufacturerurl));
++		rootdev_manufacturerurl[sizeof(rootdev_manufacturerurl)-1] = 0;
++		strncpy(rootdev_manufacturer, ROOTDEV_MANUFACTURER_TECHNISAT, sizeof(rootdev_manufacturer));
++		rootdev_manufacturer[sizeof(rootdev_manufacturer)-1] = 0;
++		strncpy(modelname, ROOTDEV_MODELNAME_TECHNISAT, MODELNAME_MAX_LEN);
++		modelname[MODELNAME_MAX_LEN-1] = 0;
++		strncpy(rootdev_modelurl, ROOTDEV_MODELURL_TECHNISAT, sizeof(rootdev_modelurl));
++		rootdev_modelurl[sizeof(rootdev_modelurl)-1] = 0;
++		strncpy(rootdev_modeldescription, ROOTDEV_MODELDESCRIPTION_TECHNISAT, sizeof(rootdev_modeldescription));
++		rootdev_modeldescription[sizeof(rootdev_modeldescription)-1] = 0;
++	}
++}
+diff -u -urN minidlna-1.1.4/upnpsoap.c minidlna-1.1.4.idl4k/upnpsoap.c
+--- minidlna-1.1.4/upnpsoap.c	2014-08-26 23:09:22.000000000 +0200
++++ minidlna-1.1.4.idl4k/upnpsoap.c	2015-04-17 21:09:13.000000000 +0200
+@@ -646,7 +646,7 @@
+ inline static void
+ add_res(char *size, char *duration, char *bitrate, char *sampleFrequency,
+         char *nrAudioChannels, char *resolution, char *dlna_pn, char *mime,
+-        char *detailID, const char *ext, struct Response *args)
++        char *detailID, const char *ext, struct Response *args, char *class)
+ {
+ 	strcatf(args->str, "&lt;res ");
+ 	if( size && (args->filter & FILTER_RES_SIZE) ) {
+@@ -681,11 +681,34 @@
+ 			                lan_addr[args->iface].str, runtime_vars.port, detailID);
+ 		}
+ 	}
++    {
++        char str[256] = {0};
++        char *token, *saveptr, *last = NULL;
++
++        strncpy(str, class, 256);
++        for(token = str;; token = NULL) {
++            token = strtok_r(token, ".", &saveptr);
++            if(!token)
++                break;
++            last = token;
++        }
++        if(strncmp(last, "videoBroadcast", 256) == 0) {
++            char *path = sql_get_text_field(db, "SELECT PATH from DETAILS where ID = '%s'", detailID);
++            if( !path ) {
++                DPRINTF(E_WARN, L_HTTP, "DETAIL ID %s not found, responding ERROR 404\n", detailID);
++            }
++
++            strcatf(args->str, "protocolInfo=\"http-get:*:%s:%s\"&gt;"
++                    "http://%s:8080/stream/channelid/%s &lt;/res&gt;",
++                    mime, dlna_pn, lan_addr[args->iface].str, path);
++        } else {
+ 	strcatf(args->str, "protocolInfo=\"http-get:*:%s:%s\"&gt;"
+ 	                          "http://%s:%d/MediaItems/%s.%s"
+ 	                          "&lt;/res&gt;",
+ 	                          mime, dlna_pn, lan_addr[args->iface].str,
+ 	                          runtime_vars.port, detailID, ext);
++        }
++    }
+ }
+ 
+ static int
+@@ -911,7 +934,7 @@
+ 		if( passed_args->filter & FILTER_RES ) {
+ 			ext = mime_to_ext(mime);
+ 			add_res(size, duration, bitrate, sampleFrequency, nrAudioChannels,
+-			        resolution, dlna_buf, mime, detailID, ext, passed_args);
++			        resolution, dlna_buf, mime, detailID, ext, passed_args, class);
+ 			if( *mime == 'i' ) {
+ 				int srcw, srch;
+ 				if( resolution && (sscanf(resolution, "%6dx%6d", &srcw, &srch) == 2) )
+@@ -944,7 +967,7 @@
+ 					{
+ 						sprintf(dlna_buf, "DLNA.ORG_PN=%s;DLNA.ORG_OP=01;DLNA.ORG_CI=1", "MPEG_PS_NTSC");
+ 						add_res(size, duration, bitrate, sampleFrequency, nrAudioChannels,
+-						        resolution, dlna_buf, mime, detailID, ext, passed_args);
++						        resolution, dlna_buf, mime, detailID, ext, passed_args, class);
+ 					}
+ 					break;
+ 				case ESonyBDP:
+@@ -956,13 +979,13 @@
+ 						{
+ 							sprintf(dlna_buf, "DLNA.ORG_PN=%s;DLNA.ORG_OP=01;DLNA.ORG_CI=1", "MPEG_TS_SD_NA");
+ 							add_res(size, duration, bitrate, sampleFrequency, nrAudioChannels,
+-							        resolution, dlna_buf, mime, detailID, ext, passed_args);
++							        resolution, dlna_buf, mime, detailID, ext, passed_args, class);
+ 						}
+ 						if( strncmp(dlna_pn, "MPEG_TS_SD_EU", 13) != 0 )
+ 						{
+ 							sprintf(dlna_buf, "DLNA.ORG_PN=%s;DLNA.ORG_OP=01;DLNA.ORG_CI=1", "MPEG_TS_SD_EU");
+ 							add_res(size, duration, bitrate, sampleFrequency, nrAudioChannels,
+-							        resolution, dlna_buf, mime, detailID, ext, passed_args);
++							        resolution, dlna_buf, mime, detailID, ext, passed_args, class);
+ 						}
+ 					}
+ 					else if( (dlna_pn &&
+@@ -977,13 +1000,13 @@
+ 						{
+ 							sprintf(dlna_buf, "DLNA.ORG_PN=%s;DLNA.ORG_OP=01;DLNA.ORG_CI=1", "MPEG_PS_NTSC");
+ 							add_res(size, duration, bitrate, sampleFrequency, nrAudioChannels,
+-						        	resolution, dlna_buf, mime, detailID, ext, passed_args);
++						        	resolution, dlna_buf, mime, detailID, ext, passed_args, class);
+ 						}
+ 						if( !dlna_pn || strncmp(dlna_pn, "MPEG_PS_PAL", 11) != 0 )
+ 						{
+ 							sprintf(dlna_buf, "DLNA.ORG_PN=%s;DLNA.ORG_OP=01;DLNA.ORG_CI=1", "MPEG_PS_PAL");
+ 							add_res(size, duration, bitrate, sampleFrequency, nrAudioChannels,
+-						        	resolution, dlna_buf, mime, detailID, ext, passed_args);
++						        	resolution, dlna_buf, mime, detailID, ext, passed_args, class);
+ 						}
+ 					}
+ 					break;
+@@ -997,7 +1020,7 @@
+ 					{
+ 					        sprintf(dlna_buf, "DLNA.ORG_PN=AVC_TS_HD_50_AC3%s", dlna_pn + 16);
+ 						add_res(size, duration, bitrate, sampleFrequency, nrAudioChannels,
+-						        resolution, dlna_buf, mime, detailID, ext, passed_args);
++						        resolution, dlna_buf, mime, detailID, ext, passed_args, class);
+ 					}
+ 					break;
+ 				case ESamsungSeriesCDE:
+diff -u -urN minidlna-1.1.4/utils.c minidlna-1.1.4.idl4k/utils.c
+--- minidlna-1.1.4/utils.c	2014-08-26 23:09:22.000000000 +0200
++++ minidlna-1.1.4.idl4k/utils.c	2015-04-17 21:49:11.000000000 +0200
+@@ -370,6 +370,11 @@
+ 	return "dat";
+ }
+ 
++int is_assets_list(const char * file)
++{
++	return ends_with(file, ".url");
++}
++
+ int
+ is_video(const char * file)
+ {
